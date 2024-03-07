@@ -19,6 +19,7 @@ import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
 import java.awt.image.BufferedImage;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Objects;
 
@@ -148,15 +149,16 @@ public class WalkieTalkieVoiceChatPlugin implements VoicechatPlugin {
             api.sendStaticSoundPacketTo(connection, event.getPacket().staticSoundPacketBuilder().opusEncodedData(data).build());
         }
 
-        byte[] data = applyWalkieTalkieEffect(event.getPacket().getOpusEncodedData(), 0.1f, api.createDecoder(), api.createEncoder());
+        byte[] data = applyWalkieTalkieEffect(event.getPacket().getOpusEncodedData(), 0.2f, api.createDecoder(), api.createEncoder());
 
         api.sendStaticSoundPacketTo(event.getSenderConnection(), event.getPacket().staticSoundPacketBuilder().opusEncodedData(data).build());
     }
 
     public static byte[] applyWalkieTalkieEffect(byte[] opusData, float noiseLevel, OpusDecoder decoder, OpusEncoder encoder) {
+
         short[] pcmData = decoder.decode(opusData);
 
-        int numSamples = pcmData.length / 2;
+        int numSamples = pcmData.length;
         short[] noise = new short[numSamples];
         for (int i = 0; i < numSamples; i++) {
             noise[i] = (short) ((Math.random() - 0.5) * Short.MAX_VALUE);
@@ -164,7 +166,7 @@ public class WalkieTalkieVoiceChatPlugin implements VoicechatPlugin {
 
         short[] pcmDataWithNoise = new short[numSamples];
         for (int i = 0; i < numSamples; i++) {
-            short pcmSample = (short) ((pcmData[2 * i] & 0xFF) | (pcmData[2 * i + 1] << 8));
+            short pcmSample = (short) (pcmData[i] * 2);
             int noisySample = (int) (pcmSample + noise[i] * noiseLevel);
             noisySample = Math.min(Short.MAX_VALUE, Math.max(Short.MIN_VALUE, noisySample));
             pcmDataWithNoise[i] = (short) noisySample;

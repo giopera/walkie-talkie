@@ -4,17 +4,19 @@ import de.maxhenkel.voicechat.api.*;
 import de.maxhenkel.voicechat.api.events.EventRegistration;
 import de.maxhenkel.voicechat.api.events.MicrophonePacketEvent;
 import de.maxhenkel.voicechat.api.events.VoicechatServerStartedEvent;
+import de.maxhenkel.voicechat.api.opus.OpusDecoder;
+import de.maxhenkel.voicechat.api.opus.OpusEncoder;
+import de.maxhenkel.voicechat.api.audio.AudioConverter;
 import fr.flaton.walkietalkie.block.entity.SpeakerBlockEntity;
 import fr.flaton.walkietalkie.config.ModConfig;
 import fr.flaton.walkietalkie.item.WalkieTalkieItem;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.text.Text;
-import net.minecraft.text.TranslatableTextContent;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 import javax.imageio.ImageIO;
+import javax.sound.sampled.AudioFormat;
 import java.awt.image.BufferedImage;
 import java.net.URL;
 import java.util.Enumeration;
@@ -141,11 +143,40 @@ public class WalkieTalkieVoiceChatPlugin implements VoicechatPlugin {
                 continue;
             }
 
-            api.sendStaticSoundPacketTo(connection, event.getPacket().staticSoundPacketBuilder().build());
+            byte[] data = applyWalkieTalkieEffect(event.getPacket().getOpusEncodedData(), 0.2f, api.createDecoder(), api.createEncoder());
+
+            api.sendStaticSoundPacketTo(connection, event.getPacket().staticSoundPacketBuilder().opusEncodedData(data).build());
         }
+
+        byte[] data = applyWalkieTalkieEffect(event.getPacket().getOpusEncodedData(), 0.1f, api.createDecoder(), api.createEncoder());
+
+        api.sendStaticSoundPacketTo(event.getSenderConnection(), event.getPacket().staticSoundPacketBuilder().opusEncodedData(data).build());
     }
 
+    public static byte[] applyWalkieTalkieEffect(byte[] opusData, float noiseLevel, OpusDecoder decoder, OpusEncoder encoder) {
+        short[] pcmData = decoder.decode(opusData);
 
+        int numSamples = pcmData.length / 2;
+        short[] noise = new short[numSamples];
+        for (int i = 0; i < numSamples; i++) {
+            noise[i] = (short) ((Math.random() - 0.5) * Short.MAX_VALUE);
+        }
+
+        short[] pcmDataWithNoise = new short[numSamples];
+        for (int i = 0; i < numSamples; i++) {
+            short pcmSample = (short) ((pcmData[2 * i] & 0xFF) | (pcmData[2 * i + 1] << 8));
+            int noisySample = (int) (pcmSample + noise[i] * noiseLevel);
+            noisySample = Math.min(Short.MAX_VALUE, Math.max(Short.MIN_VALUE, noisySample));
+            pcmDataWithNoise[i] = (short) noisySample;
+        }
+
+        byte[] opusDataWithNoise = encoder.encode(pcmDataWithNoise);
+
+        decoder.close();
+        encoder.close();
+
+        return opusDataWithNoise;
+    }
 
     private int getCanal(ItemStack stack) {
         return Objects.requireNonNull(stack.getNbt()).getInt(WalkieTalkieItem.NBT_KEY_CANAL);
